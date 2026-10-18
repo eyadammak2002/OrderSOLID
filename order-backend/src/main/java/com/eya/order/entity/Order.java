@@ -1,5 +1,8 @@
 package com.eya.order.entity;
 
+import com.eya.order.domain.NotificationType;
+import com.eya.order.domain.OrderStatus;
+import com.eya.order.domain.PaymentType;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -13,19 +16,17 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // ❌ Data clump : les infos client sont mélangées dans la commande
-    private String customerName;
-    private String customerEmail;
-    private String customerPhone;
+    @Embedded
+    private Customer customer;
 
-    // ❌ Magic strings : "REGULAR", "VIP", "STUDENT", "EMPLOYEE"
-    private String customerType;
-    // ❌ "CREDIT_CARD", "PAYPAL", "CASH"
-    private String paymentMethod;
-    // ❌ "EMAIL", "SMS", "NONE"
-    private String notificationType;
-    // ❌ "PAID", "PENDING", "CANCELLED"
-    private String status;
+    @Enumerated(EnumType.STRING)
+    private PaymentType paymentMethod;
+
+    @Enumerated(EnumType.STRING)
+    private NotificationType notificationType;
+
+    @Enumerated(EnumType.STRING)
+    private OrderStatus status;
 
     private double discount;
     private double tax;
@@ -38,31 +39,20 @@ public class Order {
     @JoinColumn(name = "order_id")
     private List<OrderItem> items = new ArrayList<>();
 
-    // ❌ Modèle anémique : que des getters/setters, toute la logique est dans le service
-
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
-    public String getCustomerName() { return customerName; }
-    public void setCustomerName(String customerName) { this.customerName = customerName; }
+    public Customer getCustomer() { return customer; }
+    public void setCustomer(Customer customer) { this.customer = customer; }
 
-    public String getCustomerEmail() { return customerEmail; }
-    public void setCustomerEmail(String customerEmail) { this.customerEmail = customerEmail; }
+    public PaymentType getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(PaymentType paymentMethod) { this.paymentMethod = paymentMethod; }
 
-    public String getCustomerPhone() { return customerPhone; }
-    public void setCustomerPhone(String customerPhone) { this.customerPhone = customerPhone; }
+    public NotificationType getNotificationType() { return notificationType; }
+    public void setNotificationType(NotificationType notificationType) { this.notificationType = notificationType; }
 
-    public String getCustomerType() { return customerType; }
-    public void setCustomerType(String customerType) { this.customerType = customerType; }
-
-    public String getPaymentMethod() { return paymentMethod; }
-    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
-
-    public String getNotificationType() { return notificationType; }
-    public void setNotificationType(String notificationType) { this.notificationType = notificationType; }
-
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+    public OrderStatus getStatus() { return status; }
+    public void setStatus(OrderStatus status) { this.status = status; }
 
     public double getDiscount() { return discount; }
     public void setDiscount(double discount) { this.discount = discount; }

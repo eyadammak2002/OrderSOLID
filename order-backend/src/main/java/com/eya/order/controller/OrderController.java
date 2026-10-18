@@ -1,9 +1,9 @@
+
 package com.eya.order.controller;
 
-import com.eya.order.entity.Order;
-import com.eya.order.repository.OrderRepository;
+import com.eya.order.dto.CreateOrderRequest;
+import com.eya.order.dto.OrderResponse;
 import com.eya.order.service.OrderService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,55 +14,50 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/orders")
-@CrossOrigin(origins = "*")
 public class OrderController {
 
-    @Autowired
-    private OrderService orderService;
+    private final OrderService orderService;
 
-    @Autowired
-    private OrderRepository orderRepository;   // ❌ service ET repository dans le controller
+    public OrderController(OrderService orderService) {
+        this.orderService = orderService;
+    }
 
     @GetMapping
-    public List<Order> getAll() {
+    public List<OrderResponse> getAll() {
         return orderService.findAll();
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody Order order) {   // ❌ entité JPA en entrée
+    public ResponseEntity<?> create(
+            @RequestBody CreateOrderRequest request) {
         try {
-            return ResponseEntity.ok(orderService.createOrder(order));
-        } catch (Exception e) {   // ❌ catch générique, tout devient 400
+            return ResponseEntity.ok(
+                    orderService.createOrder(request));
+        } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Collections.singletonMap("message", e.getMessage()));
+                    .body(Collections.singletonMap(
+                            "message", e.getMessage()));
         }
     }
 
     @PutMapping("/{id}/cancel")
     public ResponseEntity<?> cancel(@PathVariable Long id) {
         try {
-            return ResponseEntity.ok(orderService.cancelOrder(id));
+            return ResponseEntity.ok(
+                    orderService.cancelOrder(id));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Collections.singletonMap("message", e.getMessage()));
+                    .body(Collections.singletonMap(
+                            "message", e.getMessage()));
         }
     }
 
-    // ❌ Logique métier dans le controller
     @GetMapping("/stats")
     public Map<String, Object> stats() {
-        List<Order> orders = orderRepository.findAll();
-        double revenue = 0;
-        int count = 0;
-        for (Order o : orders) {
-            if (!"CANCELLED".equals(o.getStatus())) {
-                revenue += o.getTotal();
-                count++;
-            }
-        }
+        double[] s = orderService.stats();
         Map<String, Object> result = new HashMap<>();
-        result.put("orderCount", count);
-        result.put("revenue", revenue);
+        result.put("orderCount", (int) s[0]);
+        result.put("revenue", s[1]);
         return result;
     }
 }

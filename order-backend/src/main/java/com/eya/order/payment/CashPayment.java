@@ -1,23 +1,22 @@
 package com.eya.order.payment;
 
-public class CashPayment extends PaymentMethod {
+import org.springframework.stereotype.Component;
 
-    @Override
-    public double getFeeRate() {
-        return 0;
+import com.eya.order.domain.OrderStatus;
+import com.eya.order.domain.PaymentType;
+
+@Component
+public class CashPayment implements PaymentMethod {
+    public PaymentType type() { return PaymentType.CASH; }
+    public double feeRate() { return 0; }
+
+    public OrderStatus pay(double amount) {
+        System.out.println("Paiement à la livraison de " + amount + " DT");
+        return OrderStatus.PENDING; 
     }
 
-    @Override
-    public void pay(double amount) {
-        // ❌ LSP : ici "pay" n'encaisse rien, alors que dans les autres classes
-        //    "pay" veut dire "argent encaissé". Le sens de la méthode change.
-        System.out.println("Paiement à la livraison de " + amount + " DT (non encaissé)");
-    }
-
-    @Override
+    //  Plus d'UnsupportedOperationException : "rien à rembourser" = ne rien faire
     public void refund(double amount) {
-        // ❌ LSP : la sous-classe REFUSE le contrat de la classe mère.
-        //    Le code qui appelle refund() sur un PaymentMethod va planter.
-        throw new UnsupportedOperationException("Le paiement cash ne peut pas être remboursé");
+        System.out.println("Aucun remboursement (paiement non encaissé)");
     }
 }

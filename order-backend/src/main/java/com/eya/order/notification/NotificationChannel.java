@@ -1,9 +1,9 @@
 package com.eya.order.notification;
 
-// ❌ ISP : interface "fourre-tout". Aucune classe n'a besoin des 4 méthodes.
+import com.eya.order.domain.NotificationType;
+import com.eya.order.entity.Order;
+
 public interface NotificationChannel {
-    void sendEmail(String to, String message);
-    void sendSms(String phone, String message);
-    void sendPush(String deviceToken, String message);
-    void sendWhatsapp(String phone, String message);
+    NotificationType type();
+    void send(Order order, String message);
 }
