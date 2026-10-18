@@ -1,0 +1,7 @@
+.form-card { margin-bottom: 24px; }
+.form-row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding-top: 16px; }
+.full-width { width: 100%; }
+.badge { padding: 4px 12px; border-radius: 12px; font-weight: 500; font-size: 13px; }
+.stock-ok { background: #e6f4ea; color: #137333; }
+.stock-low { background: #fef7e0; color: #b06000; }
+.stock-out { background: #fce8e6; color: #c5221f; }

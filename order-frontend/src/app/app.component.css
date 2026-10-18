@@ -1,0 +1,4 @@
+.title { margin-left: 8px; font-weight: 500; }
+.spacer { flex: 1 1 auto; }
+.active { background: rgba(255, 255, 255, 0.18); }
+.container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }

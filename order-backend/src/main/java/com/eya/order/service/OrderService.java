@@ -1,20 +1,19 @@
 package com.eya.order.service;
 
+import com.eya.order.discount.DiscountService;
+import com.eya.order.domain.OrderStatus;
+import com.eya.order.dto.CreateOrderRequest;
+import com.eya.order.dto.OrderItemRequest;
+import com.eya.order.dto.OrderResponse;
+import com.eya.order.entity.Customer;
 import com.eya.order.entity.Order;
 import com.eya.order.entity.OrderItem;
 import com.eya.order.entity.Product;
-import com.eya.order.notification.EmailNotifier;
-import com.eya.order.notification.NotificationChannel;
-import com.eya.order.notification.SmsNotifier;
-import com.eya.order.payment.CashPayment;
-import com.eya.order.payment.CreditCardPayment;
+import com.eya.order.notification.NotificationService;
+import com.eya.order.payment.PaymentFactory;
 import com.eya.order.payment.PaymentMethod;
-import com.eya.order.payment.PaypalPayment;
 import com.eya.order.repository.OrderRepository;
 import com.eya.order.repository.ProductRepository;
-import com.eya.order.util.AuditLogger;
-import com.eya.order.util.PriceUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,177 +23,144 @@ import java.util.List;
 @Service
 public class OrderService {
 
-    // ❌ DIP : injection par champ, dépendances cachées, pas testable sans Spring
-    @Autowired
-    private OrderRepository orderRepository;
+    private static final double VAT_RATE = 0.19;
+    private static final double SHIPPING_COST = 7;
+    private static final double FREE_SHIPPING_FROM = 100;
 
-    @Autowired
-    private ProductRepository productRepository;
+    private final OrderRepository orderRepository;
+    private final ProductRepository productRepository;
+    private final DiscountService discountService;
+    private final PaymentFactory paymentFactory;
+    private final NotificationService notificationService;
 
-    public List<Order> findAll() {
-        return orderRepository.findAll();
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository,
+                        DiscountService discountService, PaymentFactory paymentFactory,
+                        NotificationService notificationService) {
+        this.orderRepository = orderRepository;
+        this.productRepository = productRepository;
+        this.discountService = discountService;
+        this.paymentFactory = paymentFactory;
+        this.notificationService = notificationService;
     }
 
-    // ❌ SRP : une seule méthode de ~100 lignes qui fait TOUT
+    public List<OrderResponse> findAll() {
+        return orderRepository.findAll().stream().map(OrderResponse::from).toList();
+    }
+
     @Transactional
-    public Order createOrder(Order order) {
+    public OrderResponse createOrder(CreateOrderRequest request) {
+        validate(request);
 
-        // ❌ DIP : dépendance à un Singleton global (impossible à remplacer en test)
-        AuditLogger.getInstance().log("Création commande pour " + order.getCustomerName());
+        Order order = new Order();
+        order.setCustomer(new Customer(request.customerName(), request.customerEmail(),
+                request.customerPhone(), request.customerType()));
+        order.setPaymentMethod(request.paymentMethod());
+        order.setNotificationType(request.notificationType());
 
-        // --- Validation ---
-        if (order.getCustomerName() == null || order.getCustomerName().isEmpty()) {
-            throw new RuntimeException("Nom du client obligatoire");
-        }
-        if (order.getItems() == null || order.getItems().size() == 0) {
-            throw new RuntimeException("La commande est vide");
-        }
-        // ❌ On ne valide pas quantity > 0 : une quantité négative AUGMENTE le stock
+        double subtotal = reserveStock(request, order);
+        double discount = discountService.discountFor(request.customerType(), subtotal);
+        double afterDiscount = subtotal - discount;
+        double tax = afterDiscount * VAT_RATE;
+        double withTax = afterDiscount + tax;
+        double shipping = withTax < FREE_SHIPPING_FROM ? SHIPPING_COST : 0;
 
-        // --- Stock et sous-total ---
-        double subtotal = 0;
-        for (OrderItem item : order.getItems()) {
-            Product p = productRepository.findById(item.getProductId())
-                    .orElseThrow(() -> new RuntimeException("Produit introuvable"));
-            if (p.getStock() < item.getQuantity()) {
-                throw new RuntimeException("Stock insuffisant pour " + p.getName());
-            }
-            p.setStock(p.getStock() - item.getQuantity());
-            productRepository.save(p);
+        PaymentMethod payment = paymentFactory.get(request.paymentMethod());
+        double beforeFee = withTax + shipping;
+        double fee = beforeFee * payment.feeRate();
+        double total = beforeFee + fee;
 
-            item.setProductName(p.getName());
-            item.setUnitPrice(p.getPrice());
-            subtotal += p.getPrice() * item.getQuantity();
-        }
-
-        // --- Remise ---
-        // ❌ OCP : pour ajouter un type de client, on MODIFIE ce code
-        double discount = 0;
-        if ("VIP".equals(order.getCustomerType())) {
-            discount = subtotal * 0.20;
-        } else if ("STUDENT".equals(order.getCustomerType())) {
-            discount = subtotal * 0.10;
-        } else if ("EMPLOYEE".equals(order.getCustomerType())) {
-            discount = subtotal * 0.30;
-        } else if ("REGULAR".equals(order.getCustomerType())) {
-            discount = 0;
-        } else {
-            throw new RuntimeException("Type de client inconnu");
-        }
         order.setDiscount(discount);
-        double total = subtotal - discount;
-
-        // --- TVA ---
-        double tax = PriceUtils.vat(total);   // ❌ méthode statique, non mockable
         order.setTax(tax);
-        total = total + tax;
-
-        // --- Livraison ---
-        // ❌ Valeurs magiques
-        double shipping = 0;
-        if (total < 100) {
-            shipping = 7;
-        }
         order.setShipping(shipping);
-        total = total + shipping;
-
-        // --- Choix du moyen de paiement ---
-        // ❌ OCP + DIP : on crée les classes concrètes avec "new" dans un if/else.
-        //    Ajouter APPLE_PAY = modifier ici ET dans cancelOrder.
-        PaymentMethod payment;
-        if ("CREDIT_CARD".equals(order.getPaymentMethod())) {
-            payment = new CreditCardPayment();
-        } else if ("PAYPAL".equals(order.getPaymentMethod())) {
-            payment = new PaypalPayment();
-        } else if ("CASH".equals(order.getPaymentMethod())) {
-            payment = new CashPayment();
-        } else {
-            throw new RuntimeException("Moyen de paiement inconnu");
-        }
-
-        double fee = total * payment.getFeeRate();
         order.setPaymentFee(fee);
-        total = total + fee;
-
-        payment.pay(total);
-
-        // ❌ LSP : on est obligé de tester le type concret. Si le polymorphisme
-        //    marchait vraiment, on n'aurait jamais besoin de instanceof.
-        if (payment instanceof CashPayment) {
-            order.setStatus("PENDING");
-        } else {
-            order.setStatus("PAID");
-        }
-
         order.setTotal(total);
+        order.setStatus(payment.pay(total));
         order.setCreatedAt(LocalDateTime.now());
+
         Order saved = orderRepository.save(order);
-
-        // --- Notification ---
-        // ❌ OCP + DIP + ISP : "new" concret, et on doit connaître la bonne méthode
-        //    de l'interface fourre-tout pour chaque canal
-        NotificationChannel channel;
-        if ("EMAIL".equals(order.getNotificationType())) {
-            channel = new EmailNotifier();
-            channel.sendEmail(order.getCustomerEmail(), "Commande " + saved.getId() + " confirmée");
-        } else if ("SMS".equals(order.getNotificationType())) {
-            channel = new SmsNotifier();
-            channel.sendSms(order.getCustomerPhone(), "Commande " + saved.getId() + " confirmée");
-        }
-
-        AuditLogger.getInstance().log("Commande " + saved.getId() + " créée, total " + total);
-        return saved;
+        notificationService.orderConfirmed(saved);
+        return OrderResponse.from(saved);
     }
 
     @Transactional
-    public Order cancelOrder(Long id) {
+    public OrderResponse cancelOrder(Long id) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Commande introuvable"));
 
-        if ("CANCELLED".equals(order.getStatus())) {
+        if (order.getStatus() == OrderStatus.CANCELLED) {
             throw new RuntimeException("Commande déjà annulée");
         }
 
-        // Remise en stock
+        releaseStock(order);
+        paymentFactory.get(order.getPaymentMethod()).refund(order.getTotal());
+        order.setStatus(OrderStatus.CANCELLED);
+
+        Order saved = orderRepository.save(order);
+        notificationService.orderCancelled(saved);
+        return OrderResponse.from(saved);
+    }
+
+    public double[] stats() {
+        List<Order> active = orderRepository.findAll().stream()
+                .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
+                .toList();
+        double revenue = active.stream()
+                .filter(o -> o.getStatus() == OrderStatus.PAID)
+                .mapToDouble(Order::getTotal)
+                .sum();
+        return new double[]{active.size(), revenue};
+    }
+
+    private void validate(CreateOrderRequest request) {
+        if (request.customerName() == null || request.customerName().isEmpty()) {
+            throw new RuntimeException("Nom du client obligatoire");
+        }
+        if (request.customerType() == null || request.paymentMethod() == null
+                || request.notificationType() == null) {
+            throw new RuntimeException("Type de client, paiement et notification obligatoires");
+        }
+        if (request.items() == null || request.items().isEmpty()) {
+            throw new RuntimeException("La commande est vide");
+        }
+        for (OrderItemRequest item : request.items()) {
+            if (item.productId() == null) {
+                throw new RuntimeException("Choisis un produit pour chaque article");
+            }
+            if (item.quantity() <= 0) {
+                throw new RuntimeException("La quantité doit être au moins 1");
+            }
+        }
+    }
+
+    private double reserveStock(CreateOrderRequest request, Order order) {
+        double subtotal = 0;
+        for (OrderItemRequest req : request.items()) {
+            Product p = productRepository.findById(req.productId())
+                    .orElseThrow(() -> new RuntimeException("Produit introuvable"));
+            if (p.getStock() < req.quantity()) {
+                throw new RuntimeException("Stock insuffisant pour " + p.getName());
+            }
+            p.setStock(p.getStock() - req.quantity());
+            productRepository.save(p);
+
+            OrderItem item = new OrderItem();
+            item.setProductId(p.getId());
+            item.setProductName(p.getName());
+            item.setQuantity(req.quantity());
+            item.setUnitPrice(p.getPrice());
+            order.getItems().add(item);
+
+            subtotal += p.getPrice() * req.quantity();
+        }
+        return subtotal;
+    }
+
+    private void releaseStock(Order order) {
         for (OrderItem item : order.getItems()) {
-            Product p = productRepository.findById(item.getProductId()).get();
+            Product p = productRepository.findById(item.getProductId())
+                    .orElseThrow(() -> new RuntimeException("Produit introuvable"));
             p.setStock(p.getStock() + item.getQuantity());
             productRepository.save(p);
         }
-
-        // ❌ Copier-coller du if/else de createOrder (duplication)
-        PaymentMethod payment;
-        if ("CREDIT_CARD".equals(order.getPaymentMethod())) {
-            payment = new CreditCardPayment();
-        } else if ("PAYPAL".equals(order.getPaymentMethod())) {
-            payment = new PaypalPayment();
-        } else if ("CASH".equals(order.getPaymentMethod())) {
-            payment = new CashPayment();
-        } else {
-            throw new RuntimeException("Moyen de paiement inconnu");
-        }
-
-        // ❌ LSP : sans ce instanceof, payment.refund() lèverait
-        //    UnsupportedOperationException pour le cash
-        if (payment instanceof CashPayment) {
-            System.out.println("Aucun remboursement (paiement non encaissé)");
-        } else {
-            payment.refund(order.getTotal());
-        }
-
-        order.setStatus("CANCELLED");
-
-        // ❌ Notification copiée-collée
-        NotificationChannel channel;
-        if ("EMAIL".equals(order.getNotificationType())) {
-            channel = new EmailNotifier();
-            channel.sendEmail(order.getCustomerEmail(), "Commande " + order.getId() + " annulée");
-        } else if ("SMS".equals(order.getNotificationType())) {
-            channel = new SmsNotifier();
-            channel.sendSms(order.getCustomerPhone(), "Commande " + order.getId() + " annulée");
-        }
-
-        AuditLogger.getInstance().log("Commande " + order.getId() + " annulée");
-        return orderRepository.save(order);
     }
 }

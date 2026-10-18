@@ -1,18 +1,20 @@
 package com.eya.order.payment;
 
-public class CreditCardPayment extends PaymentMethod {
+import org.springframework.stereotype.Component;
 
-    @Override
-    public double getFeeRate() {
-        return 0.015;   // ❌ valeur codée en dur
-    }
+import com.eya.order.domain.OrderStatus;
+import com.eya.order.domain.PaymentType;
 
-    @Override
-    public void pay(double amount) {
+@Component
+public class CreditCardPayment implements PaymentMethod {
+    public PaymentType type() { return PaymentType.CREDIT_CARD;}
+    public double feeRate() { return 0.015; }
+
+    public OrderStatus pay(double amount) {
         System.out.println("Paiement par carte bancaire de " + amount + " DT");
+        return OrderStatus.PAID;
     }
 
-    @Override
     public void refund(double amount) {
         System.out.println("Remboursement carte bancaire de " + amount + " DT");
     }

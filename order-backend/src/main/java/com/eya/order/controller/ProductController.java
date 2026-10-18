@@ -1,28 +1,36 @@
 package com.eya.order.controller;
 
-import com.eya.order.entity.Product;
-import com.eya.order.repository.ProductRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.eya.order.dto.ProductRequest;
+import com.eya.order.dto.ProductResponse;
+import com.eya.order.service.ProductService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/products")
-@CrossOrigin(origins = "*")   // ❌ CORS ouvert à tout le monde
 public class ProductController {
 
-    // ❌ Le controller parle directement au repository (pas de couche service)
-    @Autowired
-    private ProductRepository productRepository;
+    private final ProductService productService;
+
+    public ProductController(ProductService productService) {
+        this.productService = productService;
+    }
 
     @GetMapping
-    public List<Product> getAll() {
-        return productRepository.findAll();
+    public List<ProductResponse> getAll() {
+        return productService.findAll();
     }
 
     @PostMapping
-    public Product create(@RequestBody Product product) {   // ❌ Entité exposée, pas de DTO
-        return productRepository.save(product);
+    public ResponseEntity<?> create(@RequestBody ProductRequest request) {
+        try {
+            return ResponseEntity.ok(productService.create(request));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Collections.singletonMap("message", e.getMessage()));
+        }
     }
 }

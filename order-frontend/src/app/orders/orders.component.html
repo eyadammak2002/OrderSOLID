@@ -1,0 +1,177 @@
+<div class="stats-row">
+  <mat-card class="stat-card">
+    <mat-card-content>
+      <mat-icon>receipt_long</mat-icon>
+      <div>
+        <div class="stat-value">{{ stats.orderCount }}</div>
+        <div class="stat-label">Commandes actives</div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card class="stat-card">
+    <mat-card-content>
+      <mat-icon>payments</mat-icon>
+      <div>
+        <div class="stat-value">{{ stats.revenue | number: '1.2-2' }} DT</div>
+        <div class="stat-label">Chiffre d'affaires</div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div>
+
+<mat-card class="form-card">
+  <mat-card-header>
+    <mat-card-title>Nouvelle commande</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+
+    <div class="form-grid">
+      <mat-form-field appearance="outline">
+        <mat-label>Nom du client</mat-label>
+        <input matInput [(ngModel)]="order.customerName" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Email</mat-label>
+        <input matInput [(ngModel)]="order.customerEmail" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Téléphone</mat-label>
+        <input matInput [(ngModel)]="order.customerPhone" />
+      </mat-form-field>
+
+      <!-- ❌ Valeurs écrites en dur, dupliquées avec le backend -->
+      <mat-form-field appearance="outline">
+        <mat-label>Type de client</mat-label>
+        <mat-select [(ngModel)]="order.customerType">
+          <mat-option value="REGULAR">Regular</mat-option>
+          <mat-option value="VIP">VIP (-20%)</mat-option>
+          <mat-option value="STUDENT">Student (-10%)</mat-option>
+          <mat-option value="EMPLOYEE">Employee (-30%)</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Paiement</mat-label>
+        <mat-select [(ngModel)]="order.paymentMethod">
+          <mat-option value="CREDIT_CARD">Carte bancaire</mat-option>
+          <mat-option value="PAYPAL">PayPal</mat-option>
+          <mat-option value="CASH">À la livraison</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Notification</mat-label>
+        <mat-select [(ngModel)]="order.notificationType">
+          <mat-option value="EMAIL">Email</mat-option>
+          <mat-option value="SMS">SMS</mat-option>
+          <mat-option value="NONE">Aucune</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    <h3>Articles</h3>
+    <div class="item-row" *ngFor="let item of order.items; let i = index">
+      <mat-form-field appearance="outline" class="item-product">
+        <mat-label>Produit</mat-label>
+        <mat-select [(ngModel)]="item.productId">
+          <mat-option *ngFor="let p of products" [value]="p.id">
+            {{ p.name }} ({{ p.price | number: '1.2-2' }} DT, stock {{ p.stock }})
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="item-qty">
+        <mat-label>Quantité</mat-label>
+        <input matInput type="number" [(ngModel)]="item.quantity" />
+      </mat-form-field>
+
+      <button mat-icon-button color="warn" (click)="removeItem(i)">
+        <mat-icon>delete</mat-icon>
+      </button>
+    </div>
+
+    <div class="actions">
+      <button mat-stroked-button (click)="addItem()">
+        <mat-icon>add</mat-icon> Ajouter un article
+      </button>
+      <button mat-flat-button color="primary" (click)="submit()">
+        <mat-icon>check</mat-icon> Valider la commande
+      </button>
+    </div>
+  </mat-card-content>
+</mat-card>
+
+<mat-card>
+  <mat-card-header>
+    <mat-card-title>Commandes</mat-card-title>
+  </mat-card-header>
+  <mat-card-content class="table-wrapper">
+    <table mat-table [dataSource]="orders" class="full-width">
+
+      <ng-container matColumnDef="id">
+        <th mat-header-cell *matHeaderCellDef>ID</th>
+        <td mat-cell *matCellDef="let o">{{ o.id }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="customer">
+        <th mat-header-cell *matHeaderCellDef>Client</th>
+        <td mat-cell *matCellDef="let o">
+          {{ o.customerName }}<br />
+          <small>{{ o.customerType }}</small>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="payment">
+        <th mat-header-cell *matHeaderCellDef>Paiement</th>
+        <td mat-cell *matCellDef="let o">{{ o.paymentMethod }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="discount">
+        <th mat-header-cell *matHeaderCellDef>Remise</th>
+        <td mat-cell *matCellDef="let o">{{ o.discount | number: '1.2-2' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="tax">
+        <th mat-header-cell *matHeaderCellDef>TVA</th>
+        <td mat-cell *matCellDef="let o">{{ o.tax | number: '1.2-2' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="shipping">
+        <th mat-header-cell *matHeaderCellDef>Livraison</th>
+        <td mat-cell *matCellDef="let o">{{ o.shipping | number: '1.2-2' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="fee">
+        <th mat-header-cell *matHeaderCellDef>Frais paiement</th>
+        <td mat-cell *matCellDef="let o">{{ o.paymentFee | number: '1.2-2' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="total">
+        <th mat-header-cell *matHeaderCellDef>Total</th>
+        <td mat-cell *matCellDef="let o"><strong>{{ o.total | number: '1.2-2' }} DT</strong></td>
+      </ng-container>
+
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef>Statut</th>
+        <td mat-cell *matCellDef="let o">
+          <span class="badge" [ngClass]="getStatusClass(o.status)">{{ o.status }}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let o">
+          <button mat-stroked-button color="warn" *ngIf="o.status !== 'CANCELLED'" (click)="cancel(o.id)">
+            Annuler
+          </button>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+    </table>
+  </mat-card-content>
+</mat-card>
