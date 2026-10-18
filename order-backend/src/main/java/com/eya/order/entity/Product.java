@@ -9,7 +9,7 @@ public class Product {
     private Long id;
 
     private String name;
-    private double price;   // ❌ double pour de l'argent (BigDecimal serait correct)
+    private double price;   // double pour de l'argent (BigDecimal serait correct)
     private int stock;
 
     public Long getId() { return id; }

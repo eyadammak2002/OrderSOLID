@@ -1,18 +1,20 @@
 package com.eya.order.payment;
 
-public class PaypalPayment extends PaymentMethod {
+import org.springframework.stereotype.Component;
 
-    @Override
-    public double getFeeRate() {
-        return 0.03;
-    }
+import com.eya.order.domain.OrderStatus;
+import com.eya.order.domain.PaymentType;
 
-    @Override
-    public void pay(double amount) {
+@Component
+public class PaypalPayment implements PaymentMethod {
+    public PaymentType type() {return PaymentType.CREDIT_CARD; }
+    public double feeRate() { return 0.03; }
+
+    public OrderStatus pay(double amount) {
         System.out.println("Paiement PayPal de " + amount + " DT");
+        return OrderStatus.PAID; 
     }
 
-    @Override
     public void refund(double amount) {
         System.out.println("Remboursement PayPal de " + amount + " DT");
     }
